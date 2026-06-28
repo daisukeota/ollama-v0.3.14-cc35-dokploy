@@ -20,9 +20,16 @@ WORKDIR /build
 # 本家Ollamaのリポジトリから「v0.3.14」をピンポイントで取得
 RUN git clone --branch v0.3.14 https://github.com/ollama/ollama.git .
 
-# 【K40c最適化①】gpu.go の制限を CC 3.5 まで引き下げる
-RUN sed -i 's/CudaComputeMajorMin = 5/CudaComputeMajorMin = 3/g' gpu/gpu.go \
-    && sed -i 's/CudaComputeMinorMin = 0/CudaComputeMinorMin = 5/g' gpu/gpu.go
+# 【K40c最適化①】gpu/ 配下の全Goファイルを走査し、大文字小文字・クォーテーションを問わずCC 3.5へ強制置換
+RUN find gpu/ -type f -name "*.go" -print | xargs sed -i \
+    -e 's/CudaComputeMajorMin = 5/CudaComputeMajorMin = 3/g' \
+    -e 's/CudaComputeMinorMin = 0/CudaComputeMinorMin = 5/g' \
+    -e 's/CudaComputeMajorMin = "5"/CudaComputeMajorMin = "3"/g' \
+    -e 's/CudaComputeMinorMin = "0"/CudaComputeMinorMin = "5"/g' \
+    -e 's/cudaComputeMajorMin = 5/cudaComputeMajorMin = 3/g' \
+    -e 's/cudaComputeMinorMin = 0/cudaComputeMinorMin = 5/g' \
+    -e 's/cudaComputeMajorMin = "5"/cudaComputeMajorMin = "3"/g' \
+    -e 's/cudaComputeMinorMin = "0"/cudaComputeMinorMin = "5"/g' || true
 
 # 【K40c最適化②】内部のビルドスクリプトのコンパイルターゲット(sm_50等)をすべて「sm_35」に書き換える
 RUN find llm/ -type f -exec sed -i 's/compute_50/compute_35/g' {} + \
