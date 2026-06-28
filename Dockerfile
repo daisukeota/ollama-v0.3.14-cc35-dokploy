@@ -1,9 +1,10 @@
-# === ステージ1: ビルド環境 (CUDA 11.4 + Ubuntu 20.04) ===
-FROM nvidia/cuda:11.4.3-devel-ubuntu20.04 AS builder
+# === ステージ1: ビルド環境 (CUDA 11.8 + Ubuntu 22.04) ===
+# OSを新しくしてCMake 3.22を自動確保しつつ、K40cが組めるCUDA 11を維持します
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 必要な依存ツールのインストール
+# 必要な依存ツールのインストール (Ubuntu 22.04なので標準でCMake 3.22が入ります)
 RUN apt-get update && apt-get install -y \
     curl \
     git \
@@ -43,7 +44,7 @@ RUN go generate ./...
 RUN go build -o /build/ollama_bin .
 
 # === ステージ2: 実行用軽量環境 ===
-FROM nvidia/cuda:11.4.3-runtime-ubuntu20.04
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
 
 RUN apt-get update && apt-get install -y ca-certificates && apt-get clean && rm -rf /var/lib/apt/lists/*
 
