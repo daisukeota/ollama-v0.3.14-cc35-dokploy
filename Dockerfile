@@ -41,25 +41,11 @@ RUN git clone https://github.com/ollama/ollama.git /app/ollama && \
 WORKDIR /app/ollama
 
 # ==========================================
-# 4. 【重要】全自動コードスパイ (潜伏先を自動追跡)
+# 4. パッチの適用と門番の無効化 (特定したdiscover/gpu.goをピンポイント爆撃)
 # ==========================================
-# 1. gpu.goの実際のパスを探して中身を表示
-# 2. 万が一ファイル名が変わっていた場合を考慮し、全ファイルから「too old」を一網打尽に検索
-RUN echo "=========================================" \
-    && echo "=== SPYING GATEKEEPER CODE ===" \
-    && echo "=========================================" \
-    && find . -name "gpu.go" -exec echo "Target file found at: {}" \; -exec grep -n -C 15 "too old" {} \; \
-    && echo "--- Broad search for 'too old' across whole repository ---" \
-    && grep -rn -C 3 "too old" . || true \
-    && echo "========================================="
-
-# パスが変わっても大丈夫なように、find経由で全Goファイルに対して一斉掃射をかけます
-RUN find . -name "*.go" -exec sed -i 's/var CudaComputeMajorMin = "5"/var CudaComputeMajorMin = "3"/g' {} + \
-    && find . -name "*.go" -exec sed -i 's/var CudaComputeMinorMin = "0"/var CudaComputeMinorMin = "5"/g' {} + \
-    && find . -name "*.go" -exec sed -i 's/CudaComputeMajorMin = 5/CudaComputeMajorMin = 3/g' {} + \
-    && find . -name "*.go" -exec sed -i 's/CudaComputeMinorMin = 0/CudaComputeMinorMin = 5/g' {} + \
-    && find . -name "*.go" -exec sed -i 's/major < 5/major < 3/g' {} + \
-    && find . -name "*.go" -exec sed -i 's/Major < 5/Major < 3/g' {} +
+# 配列によるCC 5.0チェックの比較式を、K40c（CC 3.5）がスルーできるように直接書き換えます
+RUN sed -i 's/CudaComputeMin\[0\]/3/g' discover/gpu.go \
+    && sed -i 's/CudaComputeMin\[1\]/5/g' discover/gpu.go
 
 # 内部のビルドスクリプトのターゲットをすべて sm_35 に統一
 RUN find llm/ -type f -exec sed -i 's/compute_50/compute_35/g' {} + \
@@ -74,8 +60,9 @@ ENV CMAKE_CUDA_ARCHITECTURES="35"
 ENV OLLAMA_CUSTOM_CUDA_ARCH="35"
 ENV CGO_ENABLED=1
 
+# パッケージのお引越しに合わせて、ldflagsのターゲットパスも discover 側へ拡張指定します
 RUN go generate ./... && \
-    go build -ldflags "-w -s -X=github.com/ollama/ollama/gpu.CudaMinVersion=3.5" -o /usr/local/bin/ollama .
+    go build -ldflags "-w -s -X=github.com/ollama/ollama/discover.CudaMinVersion=3.5 -X=github.com/ollama/ollama/gpu.CudaMinVersion=3.5" -o /usr/local/bin/ollama .
 
 # ==========================================
 # 6. コンテナ起動設定
