@@ -41,22 +41,25 @@ RUN git clone https://github.com/ollama/ollama.git /app/ollama && \
 WORKDIR /app/ollama
 
 # ==========================================
-# 4. 【重要】門番の正体を暴くコードスパイ (ビルドログへの強制出力)
+# 4. 【重要】全自動コードスパイ (潜伏先を自動追跡)
 # ==========================================
-# Dokployのビルド画面に、gpu.goの312行目周辺の「生コード」をそのまま出力させます
+# 1. gpu.goの実際のパスを探して中身を表示
+# 2. 万が一ファイル名が変わっていた場合を考慮し、全ファイルから「too old」を一網打尽に検索
 RUN echo "=========================================" \
     && echo "=== SPYING GATEKEEPER CODE ===" \
     && echo "=========================================" \
-    && grep -n -C 15 "too old" gpu/gpu.go || true \
+    && find . -name "gpu.go" -exec echo "Target file found at: {}" \; -exec grep -n -C 15 "too old" {} \; \
+    && echo "--- Broad search for 'too old' across whole repository ---" \
+    && grep -rn -C 3 "too old" . || true \
     && echo "========================================="
 
-# とりあえず前回のsedも残しておきます
-RUN sed -i 's/var CudaComputeMajorMin = "5"/var CudaComputeMajorMin = "3"/g' gpu/gpu.go || true \
-    && sed -i 's/var CudaComputeMinorMin = "0"/var CudaComputeMinorMin = "5"/g' gpu/gpu.go || true \
-    && sed -i 's/CudaComputeMajorMin = 5/CudaComputeMajorMin = 3/g' gpu/gpu.go || true \
-    && sed -i 's/CudaComputeMinorMin = 0/CudaComputeMinorMin = 5/g' gpu/gpu.go || true \
-    && sed -i 's/major < 5/major < 3/g' gpu/gpu.go || true \
-    && sed -i 's/Major < 5/Major < 3/g' gpu/gpu.go || true
+# パスが変わっても大丈夫なように、find経由で全Goファイルに対して一斉掃射をかけます
+RUN find . -name "*.go" -exec sed -i 's/var CudaComputeMajorMin = "5"/var CudaComputeMajorMin = "3"/g' {} + \
+    && find . -name "*.go" -exec sed -i 's/var CudaComputeMinorMin = "0"/var CudaComputeMinorMin = "5"/g' {} + \
+    && find . -name "*.go" -exec sed -i 's/CudaComputeMajorMin = 5/CudaComputeMajorMin = 3/g' {} + \
+    && find . -name "*.go" -exec sed -i 's/CudaComputeMinorMin = 0/CudaComputeMinorMin = 5/g' {} + \
+    && find . -name "*.go" -exec sed -i 's/major < 5/major < 3/g' {} + \
+    && find . -name "*.go" -exec sed -i 's/Major < 5/Major < 3/g' {} +
 
 # 内部のビルドスクリプトのターゲットをすべて sm_35 に統一
 RUN find llm/ -type f -exec sed -i 's/compute_50/compute_35/g' {} + \
