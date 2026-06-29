@@ -1,15 +1,17 @@
 # === ステージ1: ビルド環境 (CUDA 11.8 + Ubuntu 22.04) ===
-# OSを新しくしてCMake 3.22を自動確保しつつ、K40cが組めるCUDA 11を維持します
 FROM nvidia/cuda:11.8.0-devel-ubuntu22.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
+# CUDAのバイナリパスを確実に明示
+ENV PATH=/usr/local/cuda/bin:${PATH}
 
-# 必要な依存ツールのインストール (Ubuntu 22.04なので標準でCMake 3.22が入ります)
+# 必要な依存ツールのインストール (古いOllamaのビルドに必要な 'patch' を追加)
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     build-essential \
     cmake \
+    patch \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Go言語のインストール (v0.3.xのビルドに最適な1.22を指定)
@@ -35,12 +37,18 @@ RUN find gpu/ -type f -name "*.go" -print | xargs sed -i \
 # 【K40c最適化②】内部のビルドスクリプトのコンパイルターゲット(sm_50等)をすべて「sm_35」に書き換える
 RUN find llm/ -type f -exec sed -i 's/compute_50/compute_35/g' {} + \
     && find llm/ -type f -exec sed -i 's/sm_50/sm_35/g' {} + \
-    && find llm/ -type f -exec sed -i 's/compute_52/compute_35/g' {} + \
+    && f-exec sed -i 's/compute_52/compute_35/g' {} + \
     && find llm/ -type f -exec sed -i 's/sm_52/sm_35/g' {} +
 
-# ビルド実行
+# ビルド実行 (もし失敗した場合は、裏に隠れているCMakeError.logを強制出力させてログに残すハック)
 ENV CGO_ENABLED=1
-RUN go generate ./...
+RUN go generate ./... || { \
+    echo "========================================="; \
+    echo "=== BUILD FAILED: PRINTING CMAKE LOGS ==="; \
+    echo "========================================="; \
+    find /build/llm/build/ -name "CMakeError.log" -exec echo "--- {} ---" \; -exec cat {} \; ; \
+    exit 1; \
+}
 RUN go build -o /build/ollama_bin .
 
 # === ステージ2: 実行用軽量環境 ===
