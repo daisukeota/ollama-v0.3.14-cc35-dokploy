@@ -2,7 +2,6 @@
 FROM nvidia/cuda:11.8.0-devel-ubuntu22.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
-# CUDAのバイナリパスを確実に明示
 ENV PATH=/usr/local/cuda/bin:${PATH}
 
 # 必要な依存ツールのインストール
@@ -23,8 +22,10 @@ WORKDIR /build
 # 本家Ollamaのリポジトリから「v0.3.14」をピンポイントで取得
 RUN git clone --branch v0.3.14 https://github.com/ollama/ollama.git .
 
-# 【K40c最適化①】gpu/ 配下を走査（xargs -r を追加してファイルがなくても警告が出ないよう修正）
-RUN find gpu/ -type f -name "*.go" -print | xargs -r sed -i \
+# 【K40c最適化①】gpu/ 配下の全Goファイルを走査
+# 変数名だけでなく、ハードコードされた「major < 5」などの条件式も正規表現で一網打尽にして「3（CC 3.5）」に引き下げます
+RUN find gpu/ -type f -name "*.go" -print | xargs -r sed -i -E \
+    -e 's/[mM]ajor\s*<\s*5/[mM]ajor < 3/g' \
     -e 's/CudaComputeMajorMin = 5/CudaComputeMajorMin = 3/g' \
     -e 's/CudaComputeMinorMin = 0/CudaComputeMinorMin = 5/g' \
     -e 's/CudaComputeMajorMin = "5"/CudaComputeMajorMin = "3"/g' \
@@ -34,7 +35,7 @@ RUN find gpu/ -type f -name "*.go" -print | xargs -r sed -i \
     -e 's/cudaComputeMajorMin = "5"/cudaComputeMajorMin = "3"/g' \
     -e 's/cudaComputeMinorMin = "0"/cudaComputeMinorMin = "5"/g' || true
 
-# 【K40c最適化②】【修正】タイポしていた f-exec を正しい find コマンドに修正
+# 【K40c最適化②】内部のビルドスクリプトのコンパイルターゲット(sm_50等)をすべて「sm_35」に書き換える
 RUN find llm/ -type f -exec sed -i 's/compute_50/compute_35/g' {} + \
     && find llm/ -type f -exec sed -i 's/sm_50/sm_35/g' {} + \
     && find llm/ -type f -exec sed -i 's/compute_52/compute_35/g' {} + \
