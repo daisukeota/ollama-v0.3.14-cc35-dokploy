@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 2.5. 最新の CMake を公式スクリプトからインストール (v0.3.14の要件を満たす)
+# 2.5. 最新の CMake を公式スクリプトからインストール
 # ==========================================
 RUN curl -sSL https://cmake.org/files/v3.26/cmake-3.26.4-linux-x86_64.sh -o /tmp/cmake.sh && \
     chmod +x /tmp/cmake.sh && \
@@ -32,7 +32,7 @@ RUN curl -sSL https://cmake.org/files/v3.26/cmake-3.26.4-linux-x86_64.sh -o /tmp
     rm /tmp/cmake.sh
 
 # ==========================================
-# 3. Ollamaのソース取得とチェックアウト (ターゲットを v0.3.14 に変更)
+# 3. Ollamaのソース取得とチェックアウト (ターゲット: v0.3.14)
 # ==========================================
 RUN git clone https://github.com/ollama/ollama.git /app/ollama && \
     cd /app/ollama && \
@@ -41,21 +41,24 @@ RUN git clone https://github.com/ollama/ollama.git /app/ollama && \
 WORKDIR /app/ollama
 
 # ==========================================
-# 4. パッチの適用と門番の無効化 (プレーンテキスト一斉掃射)
+# 4. 【重要】門番の正体を暴くコードスパイ (ビルドログへの強制出力)
 # ==========================================
-# メタ文字のエスケープ崩壊を防ぐため、愚直に全パターンを並べて確実に仕留めます
+# Dokployのビルド画面に、gpu.goの312行目周辺の「生コード」をそのまま出力させます
+RUN echo "=========================================" \
+    && echo "=== SPYING GATEKEEPER CODE ===" \
+    && echo "=========================================" \
+    && grep -n -C 15 "too old" gpu/gpu.go || true \
+    && echo "========================================="
+
+# とりあえず前回のsedも残しておきます
 RUN sed -i 's/var CudaComputeMajorMin = "5"/var CudaComputeMajorMin = "3"/g' gpu/gpu.go || true \
     && sed -i 's/var CudaComputeMinorMin = "0"/var CudaComputeMinorMin = "5"/g' gpu/gpu.go || true \
     && sed -i 's/CudaComputeMajorMin = 5/CudaComputeMajorMin = 3/g' gpu/gpu.go || true \
     && sed -i 's/CudaComputeMinorMin = 0/CudaComputeMinorMin = 5/g' gpu/gpu.go || true \
-    && sed -i 's/CudaComputeMajorMin = "5"/CudaComputeMajorMin = "3"/g' gpu/gpu.go || true \
-    && sed -i 's/CudaComputeMinorMin = "0"/CudaComputeMinorMin = "5"/g' gpu/gpu.go || true \
     && sed -i 's/major < 5/major < 3/g' gpu/gpu.go || true \
-    && sed -i 's/Major < 5/Major < 3/g' gpu/gpu.go || true \
-    && sed -i 's/major <= 4/major <= 2/g' gpu/gpu.go || true \
-    && sed -i 's/Major <= 4/Major <= 2/g' gpu/gpu.go || true
+    && sed -i 's/Major < 5/Major < 3/g' gpu/gpu.go || true
 
-# 【K40c最適化②】内部のビルドスクリプトのターゲットをすべて sm_35 に統一
+# 内部のビルドスクリプトのターゲットをすべて sm_35 に統一
 RUN find llm/ -type f -exec sed -i 's/compute_50/compute_35/g' {} + \
     && find llm/ -type f -exec sed -i 's/sm_50/sm_35/g' {} + \
     && find llm/ -type f -exec sed -i 's/compute_52/compute_35/g' {} + \
